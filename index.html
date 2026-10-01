@@ -111,6 +111,9 @@ main{padding-bottom:60px}
 .detail .links a.buy{background:var(--red);color:#fff;text-decoration:none;border-radius:5px;padding:7px 14px}
 .detail .pub{font-style:italic;font-size:15px;color:var(--muted);margin-top:2px}
 footer a{color:inherit}
+.disclaimer{margin:14px 0 0;padding:9px 12px;border:1px solid var(--line);border-left:4px solid var(--ink);border-radius:4px;background:var(--surface);font-family:var(--cond);font-size:14.5px;line-height:1.35;color:var(--muted)}
+.disclaimer strong{color:var(--text);font-weight:700}
+.disclaimer a{color:var(--red);font-weight:600}
 .empty{padding:48px 0;text-align:center;font-family:var(--cond);font-size:18px;color:var(--muted)}
 .empty button{margin-top:10px}
 mark{background:var(--t0);color:#1F2A30;border-radius:2px;padding:0 1px}
@@ -156,9 +159,10 @@ footer{font-family:var(--cond);font-size:14px;color:var(--muted);padding:24px 0 
   </div>
 </header>
 <main class="wrap">
+  <p class="disclaimer" role="note"><strong>Non è l'app ufficiale del festival.</strong> È un progetto personale generato con l'intelligenza artificiale a partire dal programma di Internazionale: per orari e variazioni fa fede il <a href="https://www.internazionale.it/festival/programma/2026" target="_blank" rel="noopener">programma ufficiale</a>.</p>
   <div class="status" id="status" aria-live="polite"></div>
   <div id="list"></div>
-  <footer>Dati estratti dal programma ufficiale del festival (2, 3 e 4 ottobre 2026). Integrati con il <a href="https://www.internazionale.it/festival/programma/2026" target="_blank" rel="noopener">programma online</a>, che fa fede per le variazioni dell'ultimo minuto. I preferiti restano salvati solo su questo dispositivo.</footer>
+  <footer>Progetto personale, non affiliato a Internazionale, realizzato con l'aiuto dell'intelligenza artificiale. Dati estratti dal programma ufficiale del festival (2, 3 e 4 ottobre 2026). Integrati con il <a href="https://www.internazionale.it/festival/programma/2026" target="_blank" rel="noopener">programma online</a>, che fa fede per le variazioni dell'ultimo minuto. I preferiti restano salvati solo su questo dispositivo.</footer>
 </main>
 
 <dialog id="sheet" aria-labelledby="sheetTitle">
