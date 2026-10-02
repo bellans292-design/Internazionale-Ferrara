@@ -112,8 +112,19 @@ main{padding-bottom:60px}
 .detail .pub{font-style:italic;font-size:15px;color:var(--muted);margin-top:2px}
 footer a{color:inherit}
 .disclaimer{margin:14px 0 0;padding:9px 12px;border:1px solid var(--line);border-left:4px solid var(--ink);border-radius:4px;background:var(--surface);font-family:var(--cond);font-size:14.5px;line-height:1.35;color:var(--muted)}
+.disclaimer .upd{display:block;margin-bottom:3px;font-weight:700;color:var(--red)}
 .disclaimer strong{color:var(--text);font-weight:700}
 .disclaimer a{color:var(--red);font-weight:600}
+.sharebtn{border:0;background:var(--red);color:#fff;border-radius:4px;font-family:var(--cond);font-weight:700;font-size:14.5px;padding:5px 11px}
+.shared{margin:14px 0 0;padding:12px 14px;border-radius:6px;background:var(--navy);color:var(--on-navy);font-family:var(--cond);font-size:15.5px;line-height:1.35}
+.shared p{margin:0}.shared strong{font-weight:700;font-size:17px}
+.shared .hint{opacity:.8;margin-top:4px;font-size:14.5px}
+.shared .row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}
+.shared button{height:38px;border-radius:5px;font-family:var(--cond);font-weight:700;font-size:15px;padding:0 14px}
+.shared .pri{background:var(--t0);border:1px solid var(--t0);color:#1F2A30}
+.shared .sec{background:none;border:1px solid var(--on-navy);color:var(--on-navy)}
+.shared .done{font-weight:600}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:30;max-width:calc(100% - 32px);background:var(--ink);color:var(--paper);font-family:var(--cond);font-weight:600;font-size:15.5px;padding:10px 16px;border-radius:6px;box-shadow:0 4px 18px rgba(0,0,0,.25)}
 .empty{padding:48px 0;text-align:center;font-family:var(--cond);font-size:18px;color:var(--muted)}
 .empty button{margin-top:10px}
 mark{background:var(--t0);color:#1F2A30;border-radius:2px;padding:0 1px}
@@ -160,11 +171,13 @@ footer{font-family:var(--cond);font-size:14px;color:var(--muted);padding:24px 0 
   </div>
 </header>
 <main class="wrap">
-  <p class="disclaimer" role="note"><strong>Non è l'app ufficiale del festival.</strong> È un progetto personale generato con l'intelligenza artificiale a partire dal programma di Internazionale: per orari e variazioni fa fede il <a href="https://www.internazionale.it/festival/programma/2026" target="_blank" rel="noopener">programma ufficiale</a>.</p>
+  <p class="disclaimer" role="note"><span class="upd">Programma aggiornato al 29 settembre 2026</span><strong>Non è l'app ufficiale del festival:</strong> è un progetto personale per consultare più facilmente il programma di Internazionale. Per orari e variazioni fanno fede i <a href="https://www.internazionale.it/festival" target="_blank" rel="noopener">canali ufficiali</a>.</p>
+  <div class="shared" id="sharedBox" hidden></div>
   <div class="status" id="status" aria-live="polite"></div>
   <div id="list"></div>
   <footer>Progetto personale, non affiliato a Internazionale, realizzato con l'aiuto dell'intelligenza artificiale. Dati estratti dal programma ufficiale del festival (2, 3 e 4 ottobre 2026). Integrati con il <a href="https://www.internazionale.it/festival/programma/2026" target="_blank" rel="noopener">programma online</a>, che fa fede per le variazioni dell'ultimo minuto. I preferiti restano salvati solo su questo dispositivo. Questa pagina raccoglie statistiche anonime su visite, ricerche, filtri ed eventi consultati, senza cookie e senza dati personali.</footer>
 </main>
+<div class="toast" id="toast" role="status" hidden></div>
 
 <dialog id="sheet" aria-labelledby="sheetTitle">
   <div class="sheet">
@@ -205,12 +218,27 @@ EVENTS.forEach(e=>{
 
 /* storage */
 const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(_){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}}};
-let favs=new Set(store.get('ife26-favs',[]));
 
 /* statistiche anonime (GoatCounter) */
 const slugify=s=>norm(String(s)).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60);
 function track(name,title){try{if(window.goatcounter&&window.goatcounter.count)window.goatcounter.count({path:name,title:title||name,event:true})}catch(_){}}
 const evName=e=>`${['ven','sab','dom'][e.d]}-${e.t.replace('.','')}-${slugify(e.ti)}`;
+/* identificativi stabili: giorno-orario-titolo */
+const BY_SID={};EVENTS.forEach(e=>{e.sid=`${['ven','sab','dom'][e.d]}-${e.t.replace('.','')}-${slugify(e.ti).slice(0,30)}`;BY_SID[e.sid]=e});
+/* preferiti: nuovo formato (v2) + conversione automatica dal vecchio (numeri d'ordine) */
+let favs=(()=>{
+  const v2=store.get('ife26-favs-v2',null);
+  if(Array.isArray(v2))return new Set(v2.filter(s=>BY_SID[s]));
+  const old=store.get('ife26-favs',[]);
+  const conv=new Set((Array.isArray(old)?old:[]).map(i=>EVENTS[i]&&EVENTS[i].sid).filter(Boolean));
+  store.set('ife26-favs-v2',[...conv]);
+  return conv;
+})();
+const saveFavs=()=>store.set('ife26-favs-v2',[...favs]);
+/* link condiviso: ?amici=sid1,sid2 */
+let shared=null,sharedMissing=0;
+try{const raw=new URLSearchParams(location.search).get('amici');
+  if(raw){const ids=[...new Set(raw.split(',').map(s=>s.trim()).filter(Boolean))];const ok=ids.filter(s=>BY_SID[s]);sharedMissing=ids.length-ok.length;if(ok.length)shared=new Set(ok)}}catch(_){}
 
 /* time in Ferrara */
 function romeNow(){
@@ -227,7 +255,8 @@ let draft=null; const open=new Set();
 
 function matches(e,s=st,ignore){
   if(s.day!=='all'&&e.d!==s.day)return false;
-  if(s.fav&&!favs.has(e.id))return false;
+  if(shared&&!shared.has(e.sid))return false;
+  if(!shared&&s.fav&&!favs.has(e.sid))return false;
   if(ignore!=='types'&&s.types.size&&!s.types.has(e.k))return false;
   if(s.slots.size&&!SLOTS.some(x=>s.slots.has(x.k)&&x.f(e.min)))return false;
   for(const f of FLAGS) if(s.flags.has(f.k)&&!f.f(e))return false;
@@ -290,7 +319,7 @@ function card(e){
       <div class="meta"><span class="tema">${hl(e.l)}</span><span>${hl(e.v)}</span>${flags}</div>
       <h3>${hl(e.ti)}</h3>${who?`<p class="who">${hl(who)}</p>`:''}
     </button>
-    <button class="star" aria-pressed="${favs.has(e.id)}" aria-label="${favs.has(e.id)?'Togli dai preferiti':'Aggiungi ai preferiti'}">${starSvg}</button>
+    <button class="star" aria-pressed="${favs.has(e.sid)}" aria-label="${favs.has(e.sid)?'Togli dai preferiti':'Aggiungi ai preferiti'}">${starSvg}</button>
     <div class="detail" id="d${e.id}">${det}<div class="access">${acc}</div><div class="links">${links}</div></div>
   </article>`;
 }
@@ -312,12 +341,14 @@ function render(){
   $('favN').textContent=favs.size;$('favToggle').setAttribute('aria-pressed',st.fav);
   $('favToggle').firstChild.textContent=(st.fav?'★':'☆')+' Preferiti ';
   $('searchBox').classList.toggle('has',!!st.q);
-  const any=act.length||st.types.size||st.q||st.fav;
+  const any=act.length||st.types.size||st.q||(st.fav&&!shared);
   const ti=todayIdx();
   const showNow=ti>=0&&(st.day===ti||st.day==='all')&&res.some(e=>e.d===ti&&!isPast(e));
+  renderShared();
   $('status').innerHTML=`<span><strong>${res.length}</strong> ${res.length===1?'evento':'eventi'}</span>`+
     act.map(a=>`<button class="act" data-g="${a.g}" data-v="${esc(a.v)}" aria-label="Rimuovi filtro ${esc(a.l)}">${esc(a.l)} ×</button>`).join('')+
-    (any?'<button class="reset" id="resetAll">Azzera tutto</button>':'')+(showNow?'<button class="nowbtn" id="goNow">Vai a adesso</button>':'');
+    (any?'<button class="reset" id="resetAll">Azzera tutto</button>':'')+(showNow?'<button class="nowbtn" id="goNow">Vai a adesso</button>':'')+
+    (st.fav&&!shared&&favs.size?'<button class="sharebtn" id="shareFavs">Condividi i miei preferiti</button>':'');
   if(!res.length){
     $('list').innerHTML=`<div class="empty">${st.fav&&!favs.size?'Non hai ancora preferiti. Tocca la stella su un evento per salvarlo qui.':'Nessun evento con questi filtri.'}<br><button class="reset" id="resetAll2" style="border:0;background:none;color:var(--red);font-family:var(--cond);font-weight:600;font-size:16px;text-decoration:underline">Azzera filtri e ricerca</button></div>`;return;
   }
@@ -335,6 +366,26 @@ function render(){
   $('list').innerHTML=h;
 }
 
+function renderShared(){
+  const el=$('sharedBox');
+  if(!shared){el.hidden=true;return}
+  const all=[...shared].filter(s=>!favs.has(s)).length;
+  el.hidden=false;
+  el.innerHTML=`<p><strong>Preferiti condivisi con te</strong> · ${shared.size} ${shared.size===1?'evento':'eventi'}${sharedMissing?` (${sharedMissing} non più in programma)`:''}</p>
+    <p class="hint">Tocca la stella per aggiungerne uno ai tuoi preferiti, oppure aggiungili tutti insieme. I tuoi preferiti attuali restano come sono.</p>
+    <div class="row">${all?`<button class="pri" id="addAllShared">Aggiungi tutti ai miei (${all})</button>`:'<span class="done">Sono già tutti tra i tuoi preferiti</span>'}<button class="sec" id="closeShared">Torna al programma</button></div>`;
+}
+function closeShared(){shared=null;sharedMissing=0;try{history.replaceState(null,'',location.pathname+location.hash)}catch(_){}render();window.scrollTo({top:0})}
+async function shareFavs(){
+  const ids=EVENTS.filter(e=>favs.has(e.sid)).map(e=>e.sid);
+  const url=location.origin+location.pathname+'?amici='+ids.join(',');
+  const text=`I miei ${ids.length} eventi preferiti a Internazionale a Ferrara 2026`;
+  track('preferiti-condivisi','Preferiti condivisi');
+  if(navigator.share){try{await navigator.share({title:text,text,url});return}catch(err){if(err&&err.name==='AbortError')return}}
+  try{await navigator.clipboard.writeText(url);toast('Link copiato: incollalo dove vuoi condividerlo')}catch(_){window.prompt('Copia questo link e condividilo:',url)}
+}
+let toastT;function toast(msg){const t=$('toast');t.textContent=msg;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,3200)}
+
 /* events */
 $('days').addEventListener('click',ev=>{const b=ev.target.closest('button');if(!b)return;const v=b.dataset.v;st.day=v==='all'?'all':+v;track('filtro-giorno-'+(v==='all'?'tutti':['ven','sab','dom'][+v]));render();window.scrollTo({top:0})});
 $('types').addEventListener('click',ev=>{const b=ev.target.closest('button');if(!b)return;const k=+b.dataset.k;if(st.types.has(k))st.types.delete(k);else{st.types.add(k);track('filtro-tipo-'+slugify(TYPES[k].n))}render()});
@@ -342,20 +393,25 @@ let qt,qtrack,lastQ='';
 function trackSearch(){const q=slugify(st.q).slice(0,40);if(q.length<3||q===lastQ)return;lastQ=q;const n=EVENTS.filter(e=>matches(e)).length;track((n?'ricerca-':'ricerca-senza-risultati-')+q,'Ricerca: '+st.q.slice(0,40))}
 $('q').addEventListener('input',ev=>{clearTimeout(qt);clearTimeout(qtrack);qt=setTimeout(()=>{st.q=ev.target.value.trim();render()},120);qtrack=setTimeout(trackSearch,1500)});
 $('qClear').addEventListener('click',()=>{$('q').value='';st.q='';render();$('q').focus()});
-$('favToggle').addEventListener('click',()=>{st.fav=!st.fav;if(st.fav)track('solo-preferiti');render()});
+$('sharedBox').addEventListener('click',ev=>{
+  if(ev.target.id==='addAllShared'){let n=0;shared.forEach(s=>{if(!favs.has(s)){favs.add(s);n++}});saveFavs();track('preferiti-ricevuti-aggiunti-tutti','Preferiti ricevuti: aggiunti tutti');toast(n===1?'Aggiunto 1 evento ai tuoi preferiti':`Aggiunti ${n} eventi ai tuoi preferiti`);render()}
+  if(ev.target.id==='closeShared')closeShared();
+});
+$('favToggle').addEventListener('click',()=>{if(shared){shared=null;sharedMissing=0;try{history.replaceState(null,'',location.pathname+location.hash)}catch(_){}st.fav=false}st.fav=!st.fav;if(st.fav)track('solo-preferiti');render()});
 function resetAll(){st.q='';$('q').value='';st.types.clear();st.slots.clear();st.flags.clear();st.temi.clear();st.venues.clear();st.fav=false;render()}
 $('status').addEventListener('click',ev=>{
   const a=ev.target.closest('.act');if(a){st[a.dataset.g].delete(a.dataset.v);render();return}
   if(ev.target.id==='resetAll')resetAll();
+  if(ev.target.id==='shareFavs')shareFavs();
   if(ev.target.id==='goNow'){track('vai-a-adesso');const n=$('nowline');if(n)n.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})}
 });
 $('list').addEventListener('click',ev=>{
   if(ev.target.id==='resetAll2'){resetAll();return}
   const card=ev.target.closest('.ev');if(!card)return;const id=+card.dataset.id;
   if(ev.target.closest('.star')){
-    const E=EVENTS[id];if(favs.has(id))favs.delete(id);else{favs.add(id);track('preferito-'+evName(E),'Preferito: '+E.ti)}store.set('ife26-favs',[...favs]);
-    const s=ev.target.closest('.star');s.setAttribute('aria-pressed',favs.has(id));s.setAttribute('aria-label',favs.has(id)?'Togli dai preferiti':'Aggiungi ai preferiti');
-    $('favN').textContent=favs.size;if(st.fav)render();return;
+    const E=EVENTS[id];if(favs.has(E.sid))favs.delete(E.sid);else{favs.add(E.sid);track('preferito-'+evName(E),'Preferito: '+E.ti)}saveFavs();
+    const s=ev.target.closest('.star');s.setAttribute('aria-pressed',favs.has(E.sid));s.setAttribute('aria-label',favs.has(E.sid)?'Togli dai preferiti':'Aggiungi ai preferiti');
+    $('favN').textContent=favs.size;if(st.fav||shared)render();return;
   }
   const a=ev.target.closest('a');
   if(a){const E=EVENTS[id];if(a.classList.contains('buy'))track('clic-biglietto-'+evName(E),'Biglietto: '+E.ti);else if(a.href.includes('/luoghi/'))track('clic-come-arrivare-'+slugify(E.v),'Come arrivare: '+E.v);else track('clic-tagliandi');return}
@@ -387,6 +443,7 @@ $('sheetReset').addEventListener('click',()=>{['slots','flags','temi','venues'].
 $('sheetApply').addEventListener('click',()=>{const pre={slots:'orario',flags:'servizi',temi:'tema',venues:'luogo'};
   ['slots','flags','temi','venues'].forEach(k=>{draft[k].forEach(v=>{if(st[k].has(v))return;let lab=v;if(k==='slots')lab=SLOTS.find(x=>x.k===v).l.split(' ')[0];if(k==='flags')lab=FLAGS.find(x=>x.k===v).l;track(`filtro-${pre[k]}-${slugify(lab)}`)});st[k]=draft[k]});$('sheet').close();render();window.scrollTo({top:0})});
 
+if(shared){st.day='all';track('preferiti-ricevuti-aperti','Preferiti ricevuti: link aperto')}
 render();
 setInterval(()=>{if(todayIdx()>=0&&!document.hidden)render()},60000);
 </script>
