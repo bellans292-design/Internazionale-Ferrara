@@ -137,6 +137,7 @@ footer{font-family:var(--cond);font-size:14px;color:var(--muted);padding:24px 0 
 @media (min-width:640px){.slot{grid-template-columns:78px 1fr}.slot .time{font-size:28px}}
 @media (prefers-reduced-motion:no-preference){.ev.open .detail{animation:open .18s ease-out}@keyframes open{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}}
 </style>
+<script data-goatcounter="https://bellans292.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 </head>
 <body>
 <header>
@@ -162,7 +163,7 @@ footer{font-family:var(--cond);font-size:14px;color:var(--muted);padding:24px 0 
   <p class="disclaimer" role="note"><strong>Non è l'app ufficiale del festival.</strong> È un progetto personale generato con l'intelligenza artificiale a partire dal programma di Internazionale: per orari e variazioni fa fede il <a href="https://www.internazionale.it/festival/programma/2026" target="_blank" rel="noopener">programma ufficiale</a>.</p>
   <div class="status" id="status" aria-live="polite"></div>
   <div id="list"></div>
-  <footer>Progetto personale, non affiliato a Internazionale, realizzato con l'aiuto dell'intelligenza artificiale. Dati estratti dal programma ufficiale del festival (2, 3 e 4 ottobre 2026). Integrati con il <a href="https://www.internazionale.it/festival/programma/2026" target="_blank" rel="noopener">programma online</a>, che fa fede per le variazioni dell'ultimo minuto. I preferiti restano salvati solo su questo dispositivo.</footer>
+  <footer>Progetto personale, non affiliato a Internazionale, realizzato con l'aiuto dell'intelligenza artificiale. Dati estratti dal programma ufficiale del festival (2, 3 e 4 ottobre 2026). Integrati con il <a href="https://www.internazionale.it/festival/programma/2026" target="_blank" rel="noopener">programma online</a>, che fa fede per le variazioni dell'ultimo minuto. I preferiti restano salvati solo su questo dispositivo. Questa pagina raccoglie statistiche anonime su visite, ricerche, filtri ed eventi consultati, senza cookie e senza dati personali.</footer>
 </main>
 
 <dialog id="sheet" aria-labelledby="sheetTitle">
@@ -205,6 +206,11 @@ EVENTS.forEach(e=>{
 /* storage */
 const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(_){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}}};
 let favs=new Set(store.get('ife26-favs',[]));
+
+/* statistiche anonime (GoatCounter) */
+const slugify=s=>norm(String(s)).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60);
+function track(name,title){try{if(window.goatcounter&&window.goatcounter.count)window.goatcounter.count({path:name,title:title||name,event:true})}catch(_){}}
+const evName=e=>`${['ven','sab','dom'][e.d]}-${e.t.replace('.','')}-${slugify(e.ti)}`;
 
 /* time in Ferrara */
 function romeNow(){
@@ -330,26 +336,30 @@ function render(){
 }
 
 /* events */
-$('days').addEventListener('click',ev=>{const b=ev.target.closest('button');if(!b)return;const v=b.dataset.v;st.day=v==='all'?'all':+v;render();window.scrollTo({top:0})});
-$('types').addEventListener('click',ev=>{const b=ev.target.closest('button');if(!b)return;const k=+b.dataset.k;st.types.has(k)?st.types.delete(k):st.types.add(k);render()});
-let qt;$('q').addEventListener('input',ev=>{clearTimeout(qt);qt=setTimeout(()=>{st.q=ev.target.value.trim();render()},120)});
+$('days').addEventListener('click',ev=>{const b=ev.target.closest('button');if(!b)return;const v=b.dataset.v;st.day=v==='all'?'all':+v;track('filtro-giorno-'+(v==='all'?'tutti':['ven','sab','dom'][+v]));render();window.scrollTo({top:0})});
+$('types').addEventListener('click',ev=>{const b=ev.target.closest('button');if(!b)return;const k=+b.dataset.k;if(st.types.has(k))st.types.delete(k);else{st.types.add(k);track('filtro-tipo-'+slugify(TYPES[k].n))}render()});
+let qt,qtrack,lastQ='';
+function trackSearch(){const q=slugify(st.q).slice(0,40);if(q.length<3||q===lastQ)return;lastQ=q;const n=EVENTS.filter(e=>matches(e)).length;track((n?'ricerca-':'ricerca-senza-risultati-')+q,'Ricerca: '+st.q.slice(0,40))}
+$('q').addEventListener('input',ev=>{clearTimeout(qt);clearTimeout(qtrack);qt=setTimeout(()=>{st.q=ev.target.value.trim();render()},120);qtrack=setTimeout(trackSearch,1500)});
 $('qClear').addEventListener('click',()=>{$('q').value='';st.q='';render();$('q').focus()});
-$('favToggle').addEventListener('click',()=>{st.fav=!st.fav;render()});
+$('favToggle').addEventListener('click',()=>{st.fav=!st.fav;if(st.fav)track('solo-preferiti');render()});
 function resetAll(){st.q='';$('q').value='';st.types.clear();st.slots.clear();st.flags.clear();st.temi.clear();st.venues.clear();st.fav=false;render()}
 $('status').addEventListener('click',ev=>{
   const a=ev.target.closest('.act');if(a){st[a.dataset.g].delete(a.dataset.v);render();return}
   if(ev.target.id==='resetAll')resetAll();
-  if(ev.target.id==='goNow'){const n=$('nowline');if(n)n.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})}
+  if(ev.target.id==='goNow'){track('vai-a-adesso');const n=$('nowline');if(n)n.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})}
 });
 $('list').addEventListener('click',ev=>{
   if(ev.target.id==='resetAll2'){resetAll();return}
   const card=ev.target.closest('.ev');if(!card)return;const id=+card.dataset.id;
   if(ev.target.closest('.star')){
-    favs.has(id)?favs.delete(id):favs.add(id);store.set('ife26-favs',[...favs]);
+    const E=EVENTS[id];if(favs.has(id))favs.delete(id);else{favs.add(id);track('preferito-'+evName(E),'Preferito: '+E.ti)}store.set('ife26-favs',[...favs]);
     const s=ev.target.closest('.star');s.setAttribute('aria-pressed',favs.has(id));s.setAttribute('aria-label',favs.has(id)?'Togli dai preferiti':'Aggiungi ai preferiti');
     $('favN').textContent=favs.size;if(st.fav)render();return;
   }
-  if(ev.target.closest('.head')){open.has(id)?open.delete(id):open.add(id);card.classList.toggle('open');card.querySelector('.head').setAttribute('aria-expanded',open.has(id))}
+  const a=ev.target.closest('a');
+  if(a){const E=EVENTS[id];if(a.classList.contains('buy'))track('clic-biglietto-'+evName(E),'Biglietto: '+E.ti);else if(a.href.includes('/luoghi/'))track('clic-come-arrivare-'+slugify(E.v),'Come arrivare: '+E.v);else track('clic-tagliandi');return}
+  if(ev.target.closest('.head')){if(open.has(id))open.delete(id);else{open.add(id);const E=EVENTS[id];track('evento-aperto-'+evName(E),'Aperto: '+E.ti)}card.classList.toggle('open');card.querySelector('.head').setAttribute('aria-expanded',open.has(id))}
 });
 
 /* filter sheet */
@@ -374,7 +384,8 @@ $('openFilters').addEventListener('click',()=>{draft=cloneState(st);renderSheet(
 $('closeSheet').addEventListener('click',()=>$('sheet').close());
 $('sheet').addEventListener('click',ev=>{if(ev.target===$('sheet'))$('sheet').close()});
 $('sheetReset').addEventListener('click',()=>{['slots','flags','temi','venues'].forEach(k=>draft[k].clear());renderSheet()});
-$('sheetApply').addEventListener('click',()=>{['slots','flags','temi','venues'].forEach(k=>st[k]=draft[k]);$('sheet').close();render();window.scrollTo({top:0})});
+$('sheetApply').addEventListener('click',()=>{const pre={slots:'orario',flags:'servizi',temi:'tema',venues:'luogo'};
+  ['slots','flags','temi','venues'].forEach(k=>{draft[k].forEach(v=>{if(st[k].has(v))return;let lab=v;if(k==='slots')lab=SLOTS.find(x=>x.k===v).l.split(' ')[0];if(k==='flags')lab=FLAGS.find(x=>x.k===v).l;track(`filtro-${pre[k]}-${slugify(lab)}`)});st[k]=draft[k]});$('sheet').close();render();window.scrollTo({top:0})});
 
 render();
 setInterval(()=>{if(todayIdx()>=0&&!document.hidden)render()},60000);
